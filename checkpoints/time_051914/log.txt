@@ -1,0 +1,8 @@
+2021-05-19 14:29:18,647 SQuAD-QA INFO: squad_dir:./dataset/
+2021-05-19 14:29:18,647 SQuAD-QA INFO: processed_dir:./dataset/processed
+2021-05-19 14:29:18,648 SQuAD-QA INFO: cache_dir:./pretrained_models
+2021-05-19 14:29:18,648 SQuAD-QA INFO: save_dir:./checkpoints/time_051914
+2021-05-19 14:29:18,648 SQuAD-QA INFO: train_batch_size:1
+2021-05-19 14:29:18,648 SQuAD-QA INFO: dev_batch_size:1
+2021-05-19 14:29:18,648 SQuAD-QA INFO: [1] Loading data
+2021-05-19 14:31:25,414 SQuAD-QA INFO: length of train/valid per gpu: 117876/14621
