@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 import torch
 from torch import nn, optim
 from tqdm import tqdm
-from transformers import AutoConfig, AutoModel
+from transformers import AutoConfig, AutoModel, AutoTokenizer
 from utils import setup_logger, MetricLogger
 from model import BertPasReader
 
@@ -28,11 +28,51 @@ def get_processed_features(features_path):
         return examples, features, dataset
 
 
-def validate(dev_loader, model, device, save_dir, fast=False):
-    pass
+def validate(dev_loader, model, device, save_dir, tokenizer, epoch_num):
+    # answer store file
+    ans_file_path = os.path.join(save_dir, "epoch{}_valid_answer.txt".format(str(epoch_num)))
+    fout = open(ans_file_path, "w")
+    bleu_score_list = []
+    model.eval()
+    epoch_iterator = tqdm(dev_loader, desc=" validate - Iteration")
+    for batch_iter, valid_batch in enumerate(epoch_iterator):
+        input_id, attention_mask, token_type_id, start_position, end_position, cls_index = [a.to(device) for
+                                                                                            a in
+                                                                                            valid_batch]
+        predict_start_logits, predict_end_logits = model(input_id, attention_mask, token_type_id)
+
+        predict_start_position = torch.argmax(predict_start_logits, 1).numpy()[0]
+        predict_end_position = torch.argmax(predict_end_logits, 1).numpy()[0]
+
+        if predict_end_position < predict_start_position:
+            predict_end_position = predict_start_position
+
+        if end_position < start_position:
+            end_position = start_position
+
+        # assert dev_batch_size == 1
+        input_id_list = input_id.numpy().tolist()[0]
+
+        true_answer_ids = input_id_list[start_position.numpy()[0]:end_position.numpy()[0] + 1]
+        predict_answer_ids = input_id_list[predict_start_position: predict_end_position + 1]
+
+        true_answer_str = tokenizer.decode(true_answer_ids)
+        predict_answer_str = tokenizer.decode(predict_answer_ids)
+        bleu_score = get_bleu_score(predict_answer_str, true_answer_str)
+        bleu_score_list.append(bleu_score)
+        fout.write("iter {}, bleu score {} \n".format(str(batch_iter), str(bleu_score)))
+        fout.write("true_answer: {} \n".format(true_answer_str))
+        fout.write("predict_answer: {} \n".format(predict_answer_str))
+
+    return sum(bleu_score_list) / len(bleu_score_list)
 
 
 def train(args, logger, model):
+    tokenizer = AutoTokenizer.from_pretrained(
+        args.tokenizer_name,
+        do_lower_case=args.do_lower_case,
+        cache_dir=args.cache_dir if args.cache_dir else None,
+    )
     logger.info('[1] Loading data')
     dev_features_path = os.path.join(args.processed_dir, "dev.pkl")
     dev_examples, dev_features, dev_dataset = get_processed_features(dev_features_path)
@@ -55,6 +95,7 @@ def train(args, logger, model):
 
     meters = MetricLogger(delimiter="  ")
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, args.schedule_step, gamma=0.1)
+    criterion = nn.CrossEntropyLoss()
 
     logger.info('[3] Start training......')
 
@@ -63,20 +104,20 @@ def train(args, logger, model):
         epoch_iterator = tqdm(train_loader, desc=" training - Iteration")
 
         for batch_iter, train_batch in enumerate(epoch_iterator):
-            progress = epoch_num + batch_iter / train_loader.example_num
+            progress = epoch_num + batch_iter / len(train_loader)
 
-            # TODO
-            doc, summ, doc_len, summ_len, summ_label, avail_topic_mask = [a.to(device) for a in train_batch]
-            sentence_loss, coverage_loss, stop_loss = model(doc, doc_len, avail_topic_mask, summ, summ_len, summ_label)
+            input_id, attention_mask, token_type_id, start_position, end_position, cls_index, p_mask = [a.to(device) for
+                                                                                                        a in
+                                                                                                        train_batch]
+            start_logits, end_logits = model(input_id, attention_mask, token_type_id)
 
-            if epoch_num < args.start_cov_epoch:
-                losses = args.w_sentence * sentence_loss + stop_loss * args.w_stop
-            else:
-                losses = args.w_sentence * sentence_loss + args.w_cov * coverage_loss + stop_loss * args.w_stop
+            loss_sum = criterion(start_logits, start_position) + criterion(end_logits, end_position)
+
+            loss = loss_sum / 2.0
 
             optimizer.zero_grad()
 
-            losses.backward()
+            loss.backward()
 
             if args.clip_value > 0:
                 nn.utils.clip_grad_value_(model.parameters(), args.clip_value)
@@ -84,10 +125,11 @@ def train(args, logger, model):
                 nn.utils.clip_grad_norm_(model.parameters(), args.clip_norm)
             optimizer.step()
 
-            # TODO
-            meters.update(loss=losses, sentence_loss=sentence_loss, coverage_loss=coverage_loss, stop_loss=stop_loss)
+            meters.update(loss=loss)
 
-            if (batch_iter + 1) % (train_loader.example_num // 100) == 0:
+            score = validate(dev_loader, model, device, args.save_dir, tokenizer, epoch_num)
+
+            if (batch_iter + 1) % (len(train_loader) // 100) == 0:
                 logger.info(
                     meters.delimiter.join(
                         [
@@ -100,7 +142,7 @@ def train(args, logger, model):
                     )
                 )
 
-        score = validate(dev_loader, model, device, args.save_dir, fast=False)
+        score = validate(dev_loader, model, device, args.save_dir, tokenizer, epoch_num)
         logger.info("val")
         logger.info(score)
         save = {
@@ -111,7 +153,7 @@ def train(args, logger, model):
         scheduler.step()
 
         torch.save(save,
-                   os.path.join(args.save_dir, 'model_epoch%d_val%.3f.pt' % (epoch_num, score['rouge_1_f_score'])))
+                   os.path.join(args.save_dir, 'model_epoch%d_val%.3f.pt' % (epoch_num, score)))
 
 
 if __name__ == '__main__':
@@ -152,6 +194,17 @@ if __name__ == '__main__':
         type=str,
         # required=True,
         help="Path to pretrained model or model identifier from huggingface.co/models",
+    )
+    # tokenizer parameters
+    parser.add_argument(
+        "--tokenizer_name",
+        default='albert-base-v2',
+        # default='prajjwal1/bert-tiny',
+        type=str,
+        help="Pretrained tokenizer name or path if not the same as model_name",
+    )
+    parser.add_argument(
+        "--do_lower_case", action="store_false", help="Set this flag if you are using an uncased model."
     )
 
     # train parameters
