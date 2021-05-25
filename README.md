@@ -45,3 +45,4 @@ python preprocess.py
 如果验证的时候，predict_end_position比predict_start_position小怎么办? 抽取文章的哪个部分?(甚至标准答案里也有这种倒着大小的span)
 
 - 抽取的肯定不是从input_id里面抽取的，因为第一个问题的答案就是[0:0]，抽取出来是[CLS]
+- 果然是我搞错了，dev集的batch的3/4不是start_pos和end_pos,而是example_index

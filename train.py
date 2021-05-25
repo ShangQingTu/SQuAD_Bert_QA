@@ -8,6 +8,8 @@ import torch
 from torch import nn, optim
 from tqdm import tqdm
 from transformers import AutoConfig, AutoModel, AutoTokenizer
+from transformers.data.processors.squad import SquadResult
+from transformers.data.metrics.squad_metrics import squad_evaluate, compute_predictions_logits
 from utils import setup_logger, MetricLogger
 from model import BertPasReader
 
@@ -28,43 +30,49 @@ def get_processed_features(features_path):
         return examples, features, dataset
 
 
-def validate(dev_loader, model, device, save_dir, tokenizer, epoch_num):
+def validate(dev_loader, dev_features, dev_examples, model, device, save_dir, epoch_num, args):
     # answer store file
-    ans_file_path = os.path.join(save_dir, "epoch{}_valid_answer.txt".format(str(epoch_num)))
-    fout = open(ans_file_path, "w")
-    bleu_score_list = []
-    model.eval()
+    # ans_file_path = os.path.join(save_dir, "epoch{}_valid_answer.txt".format(str(epoch_num)))
+    # fout = open(ans_file_path, "w")
+    all_results = []
+
     epoch_iterator = tqdm(dev_loader, desc=" validate - Iteration")
+
     for batch_iter, valid_batch in enumerate(epoch_iterator):
-        input_id, attention_mask, token_type_id, start_position, end_position, cls_index = [a.to(device) for
-                                                                                            a in
-                                                                                            valid_batch]
-        predict_start_logits, predict_end_logits = model(input_id, attention_mask, token_type_id)
+        model.eval()
+        with torch.no_grad():
+            input_id, attention_mask, token_type_id, example_indexes, cls_index, p_mask = [a.to(device) for
+                                                                                           a in
+                                                                                           valid_batch]
 
-        predict_start_position = torch.argmax(predict_start_logits, 1).numpy()[0]
-        predict_end_position = torch.argmax(predict_end_logits, 1).numpy()[0]
+            predict_start_logits, predict_end_logits = model(input_id, attention_mask, token_type_id)
 
-        if predict_end_position < predict_start_position:
-            predict_end_position = predict_start_position
+            for i, feature_index in enumerate(example_indexes):
+                eval_feature = dev_features[feature_index.item()]
+                unique_id = int(eval_feature.unique_id)
+                result = SquadResult(unique_id, predict_start_logits, predict_end_logits)
+                all_results.append(result)
 
-        if end_position < start_position:
-            end_position = start_position
+    # Compute predictions
+    output_prediction_file = os.path.join(save_dir, "predictions_epoch{}.json".format(str(epoch_num)))
+    output_nbest_file = os.path.join(save_dir, "nbest_predictions_epoch{}.json".format(str(epoch_num)))
+    predictions = compute_predictions_logits(
+        dev_examples,
+        dev_features,
+        all_results,
+        args.n_best_size,
+        args.max_answer_length,
+        args.do_lower_case,
+        output_prediction_file,
+        output_nbest_file,
+        output_null_log_odds_file=None,
+        verbose_logging=True,
+        version_2_with_negative=False,
+        null_score_diff_threshold=args.null_score_diff_threshold
+    )
 
-        # assert dev_batch_size == 1
-        input_id_list = input_id.numpy().tolist()[0]
-
-        true_answer_ids = input_id_list[start_position.numpy()[0]:end_position.numpy()[0] + 1]
-        predict_answer_ids = input_id_list[predict_start_position: predict_end_position + 1]
-
-        true_answer_str = tokenizer.decode(true_answer_ids)
-        predict_answer_str = tokenizer.decode(predict_answer_ids)
-        bleu_score = get_bleu_score(predict_answer_str, true_answer_str)
-        bleu_score_list.append(bleu_score)
-        fout.write("iter {}, bleu score {} \n".format(str(batch_iter), str(bleu_score)))
-        fout.write("true_answer: {} \n".format(true_answer_str))
-        fout.write("predict_answer: {} \n".format(predict_answer_str))
-
-    return sum(bleu_score_list) / len(bleu_score_list)
+    results = squad_evaluate(dev_examples, predictions)
+    return results
 
 
 def train(args, logger, model):
@@ -127,7 +135,7 @@ def train(args, logger, model):
 
             meters.update(loss=loss)
 
-            score = validate(dev_loader, model, device, args.save_dir, tokenizer, epoch_num)
+            score = validate(dev_loader, dev_features, dev_examples, model, device, args.save_dir, epoch_num, args)
 
             if (batch_iter + 1) % (len(train_loader) // 100) == 0:
                 logger.info(
@@ -142,7 +150,7 @@ def train(args, logger, model):
                     )
                 )
 
-        score = validate(dev_loader, model, device, args.save_dir, tokenizer, epoch_num)
+        score = validate(dev_loader, dev_features, dev_examples, model, device, args.save_dir, epoch_num, args)
         logger.info("val")
         logger.info(score)
         save = {
@@ -153,7 +161,7 @@ def train(args, logger, model):
         scheduler.step()
 
         torch.save(save,
-                   os.path.join(args.save_dir, 'model_epoch%d_val%.3f.pt' % (epoch_num, score)))
+                   os.path.join(args.save_dir, 'model_epoch%d_val%.3f.pt' % (epoch_num, score['exact'])))
 
 
 if __name__ == '__main__':
@@ -221,6 +229,25 @@ if __name__ == '__main__':
     parser.add_argument('--clip_value', type=float, default=0.5)
     parser.add_argument('--clip_norm', type=float, default=2.0)
     parser.add_argument('--use_rl', action='store_true')
+    parser.add_argument(
+        "--n_best_size",
+        default=20,
+        type=int,
+        help="The total number of n-best predictions to generate in the nbest_predictions.json output file.",
+    )
+    parser.add_argument(
+        "--max_answer_length",
+        default=30,
+        type=int,
+        help="The maximum length of an answer that can be generated. This is needed because the start "
+             "and end predictions are not conditioned on one another.",
+    )
+    parser.add_argument(
+        "--null_score_diff_threshold",
+        type=float,
+        default=0.0,
+        help="If null_score - best_non_null is greater than the threshold predict null.",
+    )
 
     args = parser.parse_args()
 
