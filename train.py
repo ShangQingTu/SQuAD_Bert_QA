@@ -30,6 +30,10 @@ def get_processed_features(features_path):
         return examples, features, dataset
 
 
+def to_list(tensor):
+    return tensor.detach().cpu().tolist()
+
+
 def validate(dev_loader, dev_features, dev_examples, model, device, save_dir, epoch_num, args):
     # answer store file
     # ans_file_path = os.path.join(save_dir, "epoch{}_valid_answer.txt".format(str(epoch_num)))
@@ -45,9 +49,11 @@ def validate(dev_loader, dev_features, dev_examples, model, device, save_dir, ep
                                                                                            a in
                                                                                            valid_batch]
 
-            predict_start_logits, predict_end_logits = model(input_id, attention_mask, token_type_id)
+            outputs = model(input_id, attention_mask, token_type_id)
 
             for i, feature_index in enumerate(example_indexes):
+                output = [to_list(output[i]) for output in outputs]
+                predict_start_logits, predict_end_logits = output
                 eval_feature = dev_features[feature_index.item()]
                 unique_id = int(eval_feature.unique_id)
                 result = SquadResult(unique_id, predict_start_logits, predict_end_logits)
@@ -76,11 +82,6 @@ def validate(dev_loader, dev_features, dev_examples, model, device, save_dir, ep
 
 
 def train(args, logger, model):
-    tokenizer = AutoTokenizer.from_pretrained(
-        args.tokenizer_name,
-        do_lower_case=args.do_lower_case,
-        cache_dir=args.cache_dir if args.cache_dir else None,
-    )
     logger.info('[1] Loading data')
     dev_features_path = os.path.join(args.processed_dir, "dev.pkl")
     dev_examples, dev_features, dev_dataset = get_processed_features(dev_features_path)
@@ -93,6 +94,7 @@ def train(args, logger, model):
 
     logger.info('[2] Building model')
     device = torch.device(args.device)
+    model.to(device)
     logger.info(model)
     if args.optim == 'adam':
         optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)

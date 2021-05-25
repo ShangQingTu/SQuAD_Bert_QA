@@ -37,12 +37,15 @@ python preprocess.py
 写好了训练部分得的代码，发现用我电脑的cpu，7.27s才能跑一篇，太慢了，改到服务器上去跑了
 
 ```
---train_batch_size 16 --device cuda
+CUDA_VISIBLE_DEVICES=4 nohup python train.py --train_batch_size 16 --dev_batch_size 16 --device cuda > train_0525.log & 
 ```
 
 关于验证，我们需要使用features吗？还是直接从Bert词表转换回去?
+
+- 从原始的文章里抽
 
 如果验证的时候，predict_end_position比predict_start_position小怎么办? 抽取文章的哪个部分?(甚至标准答案里也有这种倒着大小的span)
 
 - 抽取的肯定不是从input_id里面抽取的，因为第一个问题的答案就是[0:0]，抽取出来是[CLS]
 - 果然是我搞错了，dev集的batch的3/4不是start_pos和end_pos,而是example_index
+
