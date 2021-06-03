@@ -1,0 +1,64 @@
+2021-05-25 20:00:46,045 SQuAD-QA INFO: squad_dir:./dataset/
+2021-05-25 20:00:46,045 SQuAD-QA INFO: processed_dir:./dataset/processed
+2021-05-25 20:00:46,045 SQuAD-QA INFO: cache_dir:./pretrained_models
+2021-05-25 20:00:46,045 SQuAD-QA INFO: save_dir:./checkpoints/time_052520
+2021-05-25 20:00:46,045 SQuAD-QA INFO: config_name:albert-base-v2
+2021-05-25 20:00:46,045 SQuAD-QA INFO: model_name_or_path:albert-base-v2
+2021-05-25 20:00:46,045 SQuAD-QA INFO: tokenizer_name:albert-base-v2
+2021-05-25 20:00:46,045 SQuAD-QA INFO: do_lower_case:True
+2021-05-25 20:00:46,045 SQuAD-QA INFO: max_epoch:10
+2021-05-25 20:00:46,045 SQuAD-QA INFO: train_batch_size:1
+2021-05-25 20:00:46,045 SQuAD-QA INFO: dev_batch_size:1
+2021-05-25 20:00:46,046 SQuAD-QA INFO: device:cpu
+2021-05-25 20:00:46,046 SQuAD-QA INFO: lr:3e-05
+2021-05-25 20:00:46,046 SQuAD-QA INFO: schedule_step:[1]
+2021-05-25 20:00:46,046 SQuAD-QA INFO: weight_decay:1e-06
+2021-05-25 20:00:46,046 SQuAD-QA INFO: seed:666666
+2021-05-25 20:00:46,046 SQuAD-QA INFO: dropout:0.3
+2021-05-25 20:00:46,046 SQuAD-QA INFO: optim:adam
+2021-05-25 20:00:46,046 SQuAD-QA INFO: clip_value:0.5
+2021-05-25 20:00:46,046 SQuAD-QA INFO: clip_norm:2.0
+2021-05-25 20:00:46,046 SQuAD-QA INFO: use_rl:False
+2021-05-25 20:00:46,046 SQuAD-QA INFO: n_best_size:20
+2021-05-25 20:00:46,046 SQuAD-QA INFO: max_answer_length:30
+2021-05-25 20:00:46,046 SQuAD-QA INFO: null_score_diff_threshold:0.0
+2021-05-25 20:00:49,567 SQuAD-QA INFO: [1] Loading data
+2021-05-25 20:02:16,326 SQuAD-QA INFO: length of train/valid per gpu: 117876/14621
+2021-05-25 20:02:16,333 SQuAD-QA INFO: [2] Building model
+2021-05-25 20:02:16,351 SQuAD-QA INFO: BertPasReader(
+  (bert): AlbertModel(
+    (embeddings): AlbertEmbeddings(
+      (word_embeddings): Embedding(30000, 128, padding_idx=0)
+      (position_embeddings): Embedding(512, 128)
+      (token_type_embeddings): Embedding(2, 128)
+      (LayerNorm): LayerNorm((128,), eps=1e-12, elementwise_affine=True)
+      (dropout): Dropout(p=0, inplace=False)
+    )
+    (encoder): AlbertTransformer(
+      (embedding_hidden_mapping_in): Linear(in_features=128, out_features=768, bias=True)
+      (albert_layer_groups): ModuleList(
+        (0): AlbertLayerGroup(
+          (albert_layers): ModuleList(
+            (0): AlbertLayer(
+              (full_layer_layer_norm): LayerNorm((768,), eps=1e-12, elementwise_affine=True)
+              (attention): AlbertAttention(
+                (query): Linear(in_features=768, out_features=768, bias=True)
+                (key): Linear(in_features=768, out_features=768, bias=True)
+                (value): Linear(in_features=768, out_features=768, bias=True)
+                (dropout): Dropout(p=0, inplace=False)
+                (dense): Linear(in_features=768, out_features=768, bias=True)
+                (LayerNorm): LayerNorm((768,), eps=1e-12, elementwise_affine=True)
+              )
+              (ffn): Linear(in_features=768, out_features=3072, bias=True)
+              (ffn_output): Linear(in_features=3072, out_features=768, bias=True)
+            )
+          )
+        )
+      )
+    )
+    (pooler): Linear(in_features=768, out_features=768, bias=True)
+    (pooler_activation): Tanh()
+  )
+  (qa_outputs): Linear(in_features=768, out_features=2, bias=True)
+)
+2021-05-25 20:02:16,366 SQuAD-QA INFO: [3] Start training......

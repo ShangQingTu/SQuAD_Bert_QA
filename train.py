@@ -137,7 +137,6 @@ def train(args, logger, model):
 
             meters.update(loss=loss)
 
-            score = validate(dev_loader, dev_features, dev_examples, model, device, args.save_dir, epoch_num, args)
 
             if (batch_iter + 1) % (len(train_loader) // 100) == 0:
                 logger.info(

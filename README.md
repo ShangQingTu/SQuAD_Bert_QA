@@ -49,3 +49,24 @@ CUDA_VISIBLE_DEVICES=4 nohup python train.py --train_batch_size 16 --dev_batch_s
 - 抽取的肯定不是从input_id里面抽取的，因为第一个问题的答案就是[0:0]，抽取出来是[CLS]
 - 果然是我搞错了，dev集的batch的3/4不是start_pos和end_pos,而是example_index
 
+
+
+# Day3 bleu
+
+用bleu分数验证结果，先看看dev_example的形式：
+
+![](./pic/answers.png)
+
+一个问题有多个可能的答案，那么计算bleu的方式可以是：
+
+- 问题的每个answer和prediction算一次，取平均值作为prediction的bleu分数
+
+  - 最后在10570个问题数据的平均分是0.703,结果截图如下:
+
+    ![](./pic/mean.png)
+
+- 或者取answer和prediction最大的bleu作为bleu分数
+
+  - 这种计算方式最后在10570个问题数据的平均分是0.817,结果截图如下:
+
+    ![](./pic/max.png)
